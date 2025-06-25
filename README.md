@@ -1,145 +1,179 @@
-Squid AWS Proxy CDK Deployment
-==============================
+# 🦑 Squid AWS Proxy – CDK Deployment
 
-This repository contains the AWS CDK setup for deploying the Squid AWS Proxy infrastructure. You can deploy using an AWS CodePipeline or manually without the pipeline.
+This AWS CDK application deploys a **Squid proxy layer** on EC2 with Auto Scaling, route table automation via Lambda, CloudWatch monitoring, and optional GitHub-based CI/CD using CodePipeline.
 
-Prerequisites
--------------
+---
 
-1.  **Install AWS CDK** (if not already installed):
-
-    ```
-    npm install -g aws-cdk
-    ```
-
-2.  **Ensure AWS credentials are configured**:
-
-    -   Use IAM roles or `aws configure` if necessary.
-
-3.  **Install dependencies**:
-
-    ```
-    npm install
-    ```
-
-4.  **Ensure** `**build-env-config.ts**` **exists** in `lib/` directory with the following format:
-
-    ```
-    export const BuildEnv = {
-        uat: {
-            aws: { account: '123456789013', region: 'ap-southeast-2' },
-            name: "uat",
-            vpcId: "vpc-xxxxxxxx",
-            proxiedSubnets: ["subnet-cccc3333", "subnet-dddd4444"]
-        },
-        staging: {
-            aws: { account: '123456789014', region: 'ap-southeast-2' },
-            name: "staging",
-            vpcId: "vpc-yyyyyyyy",
-            proxiedSubnets: ["subnet-eeee5555", "subnet-ffff6666"]
-        },
-        prod: {
-            aws: { account: '123456789015', region: 'ap-southeast-2' },
-            name: "prod",
-            vpcId: "vpc-zzzzzzzz",
-            proxiedSubnets: ["subnet-gggg7777", "subnet-hhhh8888"]
-        },
-    };
-
-    ```
-
-Squid Configuration Files
--------------------------
-
-The actual Squid configuration files are located in the `assets/config_files` directory. These files define Squid proxy settings, access controls, and whitelist rules. Ensure they are properly configured before deploying.
-
-Auto-Healing and Recovery
--------------------------
-
-The Squid proxy deployment includes auto-healing mechanisms using AWS Lambda and Auto Scaling Groups:
-
--   If an instance fails, Auto Scaling will replace it automatically.
-
--   A Lambda function monitors instance health and can trigger recovery actions if needed.
-
--   The Lambda function references the instance ID in its event processing logic:
-
-    ```
-    lambda: 'InstanceId': instance_id
-    ```
-
-This ensures high availability and reliability of the Squid proxy service.
-
-Route Table Updates
--------------------
-
-The deployment includes automatic updates to the route tables to ensure correct network routing for Squid proxy instances:
-
--   Route table entries are modified to direct traffic through the Squid proxy.
-
--   If a new instance is deployed, the routing is adjusted accordingly.
-
--   This ensures seamless traffic flow and high availability.
-
-Deployment Options
-------------------
-
-### 1. Deploying **With a Pipeline** (Recommended)
-
-**Configuration in SSM Parameter store**
-
-Github AWS Connecting ARN Parameter name: /gen3/github-connection-arn
-Config Parameter name: /gen3/squid-environments
+## 📁 Project Structure
 
 ```
-              {   "tools": {
-                      "aws": { "account": "12345678901234", "region": "ap-southeast-2" },
-                      "name": "tools",
-                      "vpcId": "vpc-xxxxxxxx",
-                  }, 
-                  "uat": {
-                      "aws": { "account": "12345678901234", "region": "ap-southeast-2" },
-                      "name": "uat",
-                      "vpcId": "vpc-xxxxxxxx",
-                    "proxiedSubnets": ["subnet-cccc3333", "subnet-dddd4444"]
-                  }
-              }
-```
-```
-cdk deploy --require-approval never
-```
-
-This will:
-
--   Create an AWS CodePipeline
-
--   Deploy the infrastructure through the pipeline
-
-### 2. Deploying **Without a Pipeline** (Direct Stack Deployment)
-
-Use this method for quick testing or if you don't want to use a pipeline.
-
-```
-cdk deploy --context deployWithoutPipeline=true --context targetEnv=staging --require-approval never
+.
+├── bin/
+│   └── deploy.ts                  # CDK entrypoint
+├── lib/
+│   ├── build-env-config.ts        # Local env config
+│   ├── pipeline-stack.ts          # CodePipeline definition
+│   ├── pipeline-stage.ts          # Deployable CDK stage
+│   ├── squid-aws-proxy-stack.ts   # Squid infrastructure stack
+│   ├── squid-asg-construct.ts     # ASG + S3 config + user data
+│   ├── squid-lambda-construct.ts  # Lambda for route updates
+│   ├── squid-monitoring-construct.ts # CW metrics/alarms/SNS
+│   └── iam.ts                     # IAM policies helper
+├── assets/
+│   ├── config_files/              # squid.conf, whitelist, etc.
+│   ├── user_data/                 # EC2 bootstrap script
+│   └── lambda/                    # Python Lambda code
+└── cdk.json
 ```
 
-This will:
+---
 
--   Deploy **only** the Squid AWS Proxy stack for the specified environment (`uat`, `staging`, or `prod`).
+## Deployment
 
-Troubleshooting
----------------
+### Prerequisites
 
-### "build-env-config.ts not found"
+- AWS CDK v2
+- AWS CLI configured
+- IAM credentials with access to EC2, S3, Lambda, SNS, SSM, CloudWatch, CodePipeline
 
--   Ensure `build-env-config.ts` exists in the `lib/` directory.
+---
 
--   Verify that it follows the required format (see above).
+### Option 1: Deploy With CodePipeline
 
-### "connectionArn is required"
+```bash
+cdk deploy   --context targetEnv=uat   --context deployWithoutPipeline=false
+```
 
--   If using a pipeline, ensure the arn is stored in ssm. (/gen3/github-connection-arn)`
+Required SSM Parameters:
 
-### "Invalid environment 'xyz'"
+- `/gen3/squid-environments` – JSON string with env configs
+- `/gen3/github-connection-arn` – GitHub CodePipeline connection ARN
 
--   Ensure you are using a valid environment: `uat`, `staging`, or `prod`.
+---
+
+### Option 2: Direct Deployment (No Pipeline)
+
+```bash
+cdk deploy   --context targetEnv=uat   --context deployWithoutPipeline=true
+```
+
+Uses `lib/build-env-config.ts` instead of SSM.
+
+---
+
+## Deployed Resources
+
+### 🟢 Squid EC2 Auto Scaling Groups
+
+- One Squid instance per AZ in **public subnets**
+- IAM role for CloudWatch, SSM, EC2 control
+- User data installs and configures Squid
+- Config pulled from S3 bucket
+- Subnet route table IDs tagged onto each ASG
+
+---
+
+### 📊 CloudWatch Monitoring
+
+- Metric: `procstat_cpu_usage` from Squid process
+- One alarm per ASG instance
+- Alarms trigger on **0% CPU** (missing heartbeat)
+- Sends `ALARM` and `OK` to `squid-asg-alarm-topic` (SNS)
+
+---
+
+### 🛠 Lambda Function
+
+- Subscribed to SNS alarm topic
+- When an instance becomes healthy:
+  - Updates route table in target subnets
+  - Ensures traffic uses healthy Squid proxy
+
+---
+
+### 🔁 CodePipeline (Optional)
+
+- Synth, build, and deploy stages per environment
+- Manual approvals for `staging` and `prod`
+- GitHub integrated via AWS CodeStar connection
+
+---
+
+## 🧰 Example `build-env-config.ts`
+
+```ts
+export const BuildEnv = {
+  dev: {
+    aws: {
+      account: "123456789012",
+      region: "ap-southeast-2"
+    },
+    vpcId: "vpc-abc12345",
+    proxiedSubnets: [
+      "subnet-aaa11111",
+      "subnet-bbb22222"
+    ]
+  },
+  uat: {
+    aws: {
+      account: "123456789012",
+      region: "ap-southeast-2"
+    },
+    vpcId: "vpc-def67890",
+    proxiedSubnets: [
+      "subnet-ccc33333",
+      "subnet-ddd44444"
+    ]
+  }
+};
+```
+
+---
+
+## 🔐 Example SSM Parameter (`/gen3/squid-environments`)
+
+Set this as a **String** in AWS SSM Parameter Store:
+
+```json
+{
+  "dev": {
+    "aws": {
+      "account": "123456789012",
+      "region": "ap-southeast-2"
+    },
+    "vpcId": "vpc-abc12345",
+    "proxiedSubnets": ["subnet-aaa11111", "subnet-bbb22222"]
+  },
+  "uat": {
+    "aws": {
+      "account": "123456789012",
+      "region": "ap-southeast-2"
+    },
+    "vpcId": "vpc-def67890",
+    "proxiedSubnets": ["subnet-ccc33333", "subnet-ddd44444"]
+  }
+}
+```
+
+---
+
+## ✅ Commands Summary
+
+
+### Direct deployment
+
+```bash
+cdk deploy --context targetEnv=dev --context deployWithoutPipeline=true
+```
+
+### Deploy via pipeline
+
+```bash
+cdk deploy --context targetEnv=dev --context deployWithoutPipeline=false
+```
+
+---
+
+## 📄 License
+
+MIT
