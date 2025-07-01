@@ -68,7 +68,7 @@ async function fetchSSMParameter(paramName: string): Promise<string> {
     }
 
     // Set the target environment
-    const targetEnv = app.node.tryGetContext("targetEnv") || "uat"; 
+    const targetEnv = app.node.tryGetContext("targetEnv") || "test"; 
     const envConfig = BuildEnv[targetEnv];
 
     if (!envConfig) {
