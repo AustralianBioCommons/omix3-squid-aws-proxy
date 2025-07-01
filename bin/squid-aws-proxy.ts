@@ -91,7 +91,7 @@ async function fetchSSMParameter(paramName: string): Promise<string> {
         // Deploy the pipeline, update this with your own fork
         const squidProxy = new PipelineStack(app, 'squid-pipeline-stack', {
             env: awsEnv, // ✅ Explicitly set environment
-            repoString: `AustralianBioCommons/squid-aws-proxy`,
+            repoString: `AustralianBioCommons/omix3-squid-aws-proxy`,
             branch: "main",
             pipelineName: 'gen3-squid-pipeline',
             connectionArn,
