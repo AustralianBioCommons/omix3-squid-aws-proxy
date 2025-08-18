@@ -84,5 +84,6 @@ EOF
 
 # Always signal CloudFormation with overall status (0=success, 1=failure)
 yum update -y aws-cfn-bootstrap || true
-/opt/aws/bin/cfn-signal -e ${OVERALL_STATUS} --stack ${AWS::StackName} --resource "${__ASG__}" --region ${AWS::Region}
+/opt/aws/bin/cfn-signal -e "$OVERALL_STATUS" --stack ${AWS::StackName} --resource "${__ASG__}" --region ${AWS::Region}
+
 
