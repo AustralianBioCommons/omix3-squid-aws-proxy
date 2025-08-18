@@ -83,10 +83,10 @@ import {readFileSync} from 'fs';
                     availabilityZones: [zone]
                  },
                 healthChecks: autoscaling.HealthChecks.ec2({
-                    gracePeriod: cdk.Duration.minutes(5)
+                    gracePeriod: cdk.Duration.minutes(8)
                 }),
                 signals: autoscaling.Signals.waitForAll({
-                    timeout: cdk.Duration.minutes(10)
+                    timeout: cdk.Duration.minutes(15)
                 }),
                 keyPair: undefined       
             });
